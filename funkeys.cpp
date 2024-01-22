@@ -136,10 +136,10 @@ void handle_event(libevdev_uinput *dev_clone, struct input_event& ev) {
             send_event(dev_clone, input_event{{}, EV_KEY, KEY_RIGHTCTRL, 0});
             send_syn(dev_clone);
             // Simulate press and release for "enter"
-            send_event(dev_clone, input_event{{}, EV_MSC, MSC_SCAN, 458792});
+            //send_event(dev_clone, input_event{{}, EV_MSC, MSC_SCAN, 458792});
             send_event(dev_clone, input_event{{}, EV_KEY, KEY_ENTER, 1});
             send_syn(dev_clone);
-            send_event(dev_clone, input_event{{}, EV_MSC, MSC_SCAN, 458792});
+            //send_event(dev_clone, input_event{{}, EV_MSC, MSC_SCAN, 458792});
             ev.code = KEY_ENTER;
         } else {
             enter_pending = false;
