@@ -38,7 +38,7 @@ using namespace std::literals;
  * https://glm.g-truc.net/copying.txt (The Happy Bunny License (Modified MIT License))
  *
  * To build:
- * $ c++ -I/usr/include/libevdev-1.0 -g -std=c++17 -o funkeys funkeys.cpp -levdev
+ * $ c++ -I/usr/include/libevdev-1.0 -O2 -std=c++17 -o funkeys funkeys.cpp -levdev
  */
 
 /*
@@ -46,6 +46,7 @@ using namespace std::literals;
  * /usr/share/doc/libevdev-dev/html/index.html
  * /usr/share/doc/libevdev-dev/html/group__uinput.html
  * /usr/share/doc/linux-doc/input/event-codes.rst.gz
+ * /usr/share/doc/linux-doc/input/uinput.rst.gz
  * https://gitlab.freedesktop.org/libevdev/libevdev/blob/master/tools/libevdev-events.c
  *
  * Input code list: /usr/include/linux/input-event-codes.h
@@ -125,25 +126,11 @@ void handle_event(libevdev_uinput *dev_clone, struct input_event& ev) {
 
     LOG(std::cout << "\nReceived event: " << event_to_string(ev) << " Converted to: ");
 
-    auto delay = 200ms;
-    // if (ev.type == EV_MSC)
-    //     return;
+    auto delay = 250ms;
+
     if (ev.type == EV_KEY) {
-        if (ev.code == KEY_ENTER && ev.value == 0 && enter_pending && std::chrono::system_clock::now() - last_enter_press < delay) {
-            LOG(std::cout << "<Enter up>");
-            enter_pending = false;
-            // Simulate the release of the ctrl key we "held" preemptively
-            send_event(dev_clone, input_event{{}, EV_KEY, KEY_RIGHTCTRL, 0});
-            send_syn(dev_clone);
-            // Simulate press and release for "enter"
-            //send_event(dev_clone, input_event{{}, EV_MSC, MSC_SCAN, 458792});
-            send_event(dev_clone, input_event{{}, EV_KEY, KEY_ENTER, 1});
-            send_syn(dev_clone);
-            //send_event(dev_clone, input_event{{}, EV_MSC, MSC_SCAN, 458792});
-            ev.code = KEY_ENTER;
-        } else {
-            enter_pending = false;
-            switch (ev.code) {
+        /* Step 1. Straightforward 1:1 remappings. */
+        switch (ev.code) {
             case KEY_CAPSLOCK:
                 ev.code = KEY_LEFTCTRL;
                 break;
@@ -153,17 +140,33 @@ void handle_event(libevdev_uinput *dev_clone, struct input_event& ev) {
             case KEY_RIGHTCTRL:
                 ev.code = KEY_ENTER;
                 break;
-            case KEY_ENTER:
-                enter_pending = true;
-                ev.code = KEY_RIGHTCTRL;
-                if (ev.value == 1) {
-                    // If this is a new keypress (and not repeat), remember when we pressed the key.
-                    last_enter_press = std::chrono::system_clock::now();
-                }
-                break;
             default:
                 break;
+        }
+
+        /* Step 2. ENTER key related logic. */
+        if (ev.code == KEY_ENTER) {
+            if (ev.value == 0 && enter_pending
+                && std::chrono::system_clock::now() - last_enter_press < delay) {
+                enter_pending = false;
+                // Simulate the release of the ctrl key we "held" preemptively
+                send_event(dev_clone, input_event{{}, EV_KEY, KEY_RIGHTCTRL, 0});
+                send_syn(dev_clone);
+                // Simulate press and release for "enter"
+                send_event(dev_clone, input_event{{}, EV_KEY, KEY_ENTER, 1});
+                send_syn(dev_clone);
+                ev.code = KEY_ENTER;
+            } else {
+                enter_pending = true;
+                ev.code = KEY_RIGHTCTRL;
             }
+            if (ev.value == 1) {
+                // If this is a new keypress (and not repeat), remember when we pressed the key.
+                last_enter_press = std::chrono::system_clock::now();
+            }
+        } else if (ev.value == 1) {
+            // If a key is pressed after "Enter", "Enter" will be treated as a "Ctrl"
+            enter_pending = false;
         }
     }
     send_event(dev_clone, ev);
